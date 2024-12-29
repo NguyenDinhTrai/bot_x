@@ -1,8 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.prompt_reply_system = exports.prompt_to_create_post = exports.prompt_system = exports.time_utc_post_tweeter_every_day = void 0;
-exports.time_utc_post_tweeter_every_day = "00 51 10 * * *";
+////// custome //////
+exports.time_utc_post_tweeter_every_day = "00 17 15 * * *";
 let topics = "Parallel universes, Lost civilizations, Unexplored oceans, Cryptic symbols, The human mind, Alien artefacts, Ancient prophecies, Cosmic phenomena, Time travel, Forgotten technologies";
+////// end custome //////
 exports.prompt_system = "You are a mysterious storyteller who writes captivating and thought-provoking tweets. Your tone is enigmatic, your words spark curiosity, and your goal is to engage the audience with unexpected twists.";
 exports.prompt_to_create_post = `Write a short Twitter post (under 250 characters) with a mysterious and captivating tone. The content should spark curiosity and provoke thought, using vivid and intriguing language.
 I have the following topics: ${topics}. Please randomly choose a topic to write about.

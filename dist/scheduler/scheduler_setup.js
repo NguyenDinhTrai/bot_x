@@ -13,6 +13,7 @@ let SchedulerManager = class SchedulerManager {
         this.gptService = gptService;
         // Chạy Post bài viết lên Twitter mỗi ngày
         node_cron_1.default.schedule(constant_1.time_utc_post_tweeter_every_day, async () => {
+            console.log("Post bài viết lên Twitter mỗi ngày");
             try {
                 let content = await this.getContentFromGPT();
                 while (content.length > 280) {
@@ -27,7 +28,7 @@ let SchedulerManager = class SchedulerManager {
             timezone: "Etc/UTC"
         });
         // Chạy Reply bài viết lên Twitter mỗi 15 phút
-        node_cron_1.default.schedule('*/15 * * * *', async () => {
+        node_cron_1.default.schedule('00 30 15 * * *', async () => {
             try {
                 let RepliesToReplyInTodayTweet = await this.twitterService.getRepliesToReplyInTodayTweet();
                 if (RepliesToReplyInTodayTweet == null)

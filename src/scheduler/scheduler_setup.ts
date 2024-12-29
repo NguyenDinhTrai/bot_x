@@ -15,6 +15,7 @@ export class SchedulerManager implements LifeCycleObserver {
   ) {
     // Chạy Post bài viết lên Twitter mỗi ngày
     cron.schedule(time_utc_post_tweeter_every_day, async () => {
+      console.log("Post bài viết lên Twitter mỗi ngày");
       try {
         let content = await this.getContentFromGPT();
         while (content.length > 280) {
@@ -30,7 +31,7 @@ export class SchedulerManager implements LifeCycleObserver {
     });
 
     // Chạy Reply bài viết lên Twitter mỗi 15 phút
-    cron.schedule('*/15 * * * *', async () => {
+    cron.schedule('*/16 * * * *', async () => {
       try {
         let RepliesToReplyInTodayTweet = await this.twitterService.getRepliesToReplyInTodayTweet();
         if (RepliesToReplyInTodayTweet == null) return;
