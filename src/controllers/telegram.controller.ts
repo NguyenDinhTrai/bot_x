@@ -3,9 +3,9 @@
 import {service} from '@loopback/core';
 import {repository} from '@loopback/repository';
 import {post, requestBody} from '@loopback/rest';
-import {max_number_of_message_for_context_bot_telegram, nameChatBotTelegram, prompt_system_telegram, time_of_session_telegram_bot} from '../constant';
+import {max_number_of_message_for_context_bot_telegram, nameChatBotTelegram, prompt_reply_system_telegram, time_of_session_telegram_bot} from '../constant';
 import {ChatGptParam, MessGpt} from '../models';
-import {MessageRepository} from '../repositories';
+import {ContentTelegramRepository, MessageRepository} from '../repositories';
 import {GptService, TelegramBotService} from '../services';
 
 export class TelegramController {
@@ -16,6 +16,8 @@ export class TelegramController {
     public gptService: GptService,
     @repository(MessageRepository)
     public messageRepository: MessageRepository,
+    @repository(ContentTelegramRepository)
+    public contentTelegramRepository: ContentTelegramRepository,
   ) { }
 
   @post('api/telegram-webhook')
@@ -35,7 +37,7 @@ export class TelegramController {
           const text = update.message.text || '';
           const idOfSender = update.message.from.id;
           const nameOfSender = update.message.from.first_name + " " + update.message.from.last_name;
-          let content = text.replace(`@${nameChatBotTelegram}`, "").trim();
+          let content = text;
           const context_chat = await this.saveMessageAndGetContext(idOfSender, nameOfSender, content, chatId);
           let isMention = ((update.message.entities ?? []).length > 0) && (update.message.entities[0].type === "mention");
           if (isMention) {
@@ -88,11 +90,18 @@ export class TelegramController {
   async getContentReplyFromGPT(
     context: string,
   ): Promise<string> {
+    const lastContent = await this.contentTelegramRepository.findOne({
+      order: ['create_at DESC'],
+    })
+    if (lastContent == null) {
+      throw new Error("Không tìm thấy content cuối cùng");
+    };
+    let content = lastContent.content;
     const res = await this.gptService.responseChat(new ChatGptParam({
       messages: [
         new MessGpt({
           role: "system",
-          content: prompt_system_telegram,
+          content: prompt_reply_system_telegram(content ?? ""),
         }),
         new MessGpt({
           role: "user",

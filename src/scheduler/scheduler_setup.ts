@@ -1,9 +1,11 @@
 
 import {injectable, LifeCycleObserver, service} from '@loopback/core';
+import {repository} from '@loopback/repository';
 import cron from 'node-cron';
-import {prompt_reply_system, prompt_system, prompt_to_create_post, time_utc_post_tweeter_every_day} from '../constant';
+import {prompt_reply_system, prompt_system, prompt_to_create_post, time_utc_post_telegram_every_day, time_utc_post_tweeter_every_day} from '../constant';
 import {ChatGptParam, MessGpt} from '../models';
-import {GptService, TwitterService} from '../services';
+import {ContentTelegramRepository, MessageRepository} from '../repositories';
+import {GptService, TelegramBotService, TwitterService} from '../services';
 
 @injectable()
 export class SchedulerManager implements LifeCycleObserver {
@@ -12,6 +14,12 @@ export class SchedulerManager implements LifeCycleObserver {
     public twitterService: TwitterService,
     @service(GptService)
     public gptService: GptService,
+    @service(TelegramBotService)
+    public telegramBotService: TelegramBotService,
+    @repository(ContentTelegramRepository)
+    public contentTelegramRepository: ContentTelegramRepository,
+    @repository(MessageRepository)
+    public messageRepository: MessageRepository,
   ) {
     // Chạy Post bài viết lên Twitter mỗi ngày
     cron.schedule(time_utc_post_tweeter_every_day, async () => {
@@ -22,6 +30,32 @@ export class SchedulerManager implements LifeCycleObserver {
           content = await this.getContentFromGPT();
         }
         await this.twitterService.postTweet(content);
+      } catch (e) {
+        console.log(e);
+      }
+
+    }, {
+      timezone: "Etc/UTC"
+    });
+
+    cron.schedule(time_utc_post_telegram_every_day, async () => {
+      console.log("Post bài viết lên Telegram mỗi ngày");
+      try {
+        let content = await this.getContentFromGPT();
+        content = await this.getContentFromGPT();
+        let lastChatContent = (await this.messageRepository.findOne(
+          {
+            order: ['create_at DESC'],
+          }
+        ));
+        if (lastChatContent == null) return;
+        let lastChatId = lastChatContent.group_id;
+        if (lastChatId == null) return;
+        await this.telegramBotService.bot.sendMessage(lastChatId, content);
+        await this.contentTelegramRepository.create({
+          content: content,
+          id_group: lastChatId
+        })
       } catch (e) {
         console.log(e);
       }

@@ -3,14 +3,19 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SchedulerManager = void 0;
 const tslib_1 = require("tslib");
 const core_1 = require("@loopback/core");
+const repository_1 = require("@loopback/repository");
 const node_cron_1 = tslib_1.__importDefault(require("node-cron"));
 const constant_1 = require("../constant");
 const models_1 = require("../models");
+const repositories_1 = require("../repositories");
 const services_1 = require("../services");
 let SchedulerManager = class SchedulerManager {
-    constructor(twitterService, gptService) {
+    constructor(twitterService, gptService, telegramBotService, contentTelegramRepository, messageRepository) {
         this.twitterService = twitterService;
         this.gptService = gptService;
+        this.telegramBotService = telegramBotService;
+        this.contentTelegramRepository = contentTelegramRepository;
+        this.messageRepository = messageRepository;
         // Chạy Post bài viết lên Twitter mỗi ngày
         node_cron_1.default.schedule(constant_1.time_utc_post_tweeter_every_day, async () => {
             console.log("Post bài viết lên Twitter mỗi ngày");
@@ -20,6 +25,31 @@ let SchedulerManager = class SchedulerManager {
                     content = await this.getContentFromGPT();
                 }
                 await this.twitterService.postTweet(content);
+            }
+            catch (e) {
+                console.log(e);
+            }
+        }, {
+            timezone: "Etc/UTC"
+        });
+        node_cron_1.default.schedule(constant_1.time_utc_post_telegram_every_day, async () => {
+            console.log("Post bài viết lên Telegram mỗi ngày");
+            try {
+                let content = await this.getContentFromGPT();
+                content = await this.getContentFromGPT();
+                let lastChatContent = (await this.messageRepository.findOne({
+                    order: ['create_at DESC'],
+                }));
+                if (lastChatContent == null)
+                    return;
+                let lastChatId = lastChatContent.group_id;
+                if (lastChatId == null)
+                    return;
+                await this.telegramBotService.bot.sendMessage(lastChatId, content);
+                await this.contentTelegramRepository.create({
+                    content: content,
+                    id_group: lastChatId
+                });
             }
             catch (e) {
                 console.log(e);
@@ -88,7 +118,13 @@ exports.SchedulerManager = SchedulerManager = tslib_1.__decorate([
     (0, core_1.injectable)(),
     tslib_1.__param(0, (0, core_1.service)(services_1.TwitterService)),
     tslib_1.__param(1, (0, core_1.service)(services_1.GptService)),
+    tslib_1.__param(2, (0, core_1.service)(services_1.TelegramBotService)),
+    tslib_1.__param(3, (0, repository_1.repository)(repositories_1.ContentTelegramRepository)),
+    tslib_1.__param(4, (0, repository_1.repository)(repositories_1.MessageRepository)),
     tslib_1.__metadata("design:paramtypes", [services_1.TwitterService,
-        services_1.GptService])
+        services_1.GptService,
+        services_1.TelegramBotService,
+        repositories_1.ContentTelegramRepository,
+        repositories_1.MessageRepository])
 ], SchedulerManager);
 //# sourceMappingURL=scheduler_setup.js.map

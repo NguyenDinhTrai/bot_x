@@ -11,10 +11,11 @@ const models_1 = require("../models");
 const repositories_1 = require("../repositories");
 const services_1 = require("../services");
 let TelegramController = class TelegramController {
-    constructor(telegramBotService, gptService, messageRepository) {
+    constructor(telegramBotService, gptService, messageRepository, contentTelegramRepository) {
         this.telegramBotService = telegramBotService;
         this.gptService = gptService;
         this.messageRepository = messageRepository;
+        this.contentTelegramRepository = contentTelegramRepository;
     }
     async handleTelegramUpdate(body) {
         var _a;
@@ -29,7 +30,7 @@ let TelegramController = class TelegramController {
                     const text = update.message.text || '';
                     const idOfSender = update.message.from.id;
                     const nameOfSender = update.message.from.first_name + " " + update.message.from.last_name;
-                    let content = text.replace(`@${constant_1.nameChatBotTelegram}`, "").trim();
+                    let content = text;
                     const context_chat = await this.saveMessageAndGetContext(idOfSender, nameOfSender, content, chatId);
                     let isMention = (((_a = update.message.entities) !== null && _a !== void 0 ? _a : []).length > 0) && (update.message.entities[0].type === "mention");
                     if (isMention) {
@@ -66,7 +67,6 @@ let TelegramController = class TelegramController {
     async getContextChat(chatId) {
         let timeBefore10Minutes = new Date();
         timeBefore10Minutes.setMinutes(timeBefore10Minutes.getMinutes() - constant_1.time_of_session_telegram_bot);
-        console.log(timeBefore10Minutes);
         let messages = await this.messageRepository.find({
             where: {
                 group_id: chatId,
@@ -75,17 +75,25 @@ let TelegramController = class TelegramController {
                 }
             }
         });
-        if (messages.length > 10)
-            messages = messages.slice(messages.length - 10, messages.length);
-        let messagesTexts = messages.map((message) => message.username + message.text);
+        if (messages.length > constant_1.max_number_of_message_for_context_bot_telegram)
+            messages = messages.slice(messages.length - constant_1.max_number_of_message_for_context_bot_telegram, messages.length);
+        let messagesTexts = messages.map((message) => message.username + ": " + message.text);
         return messagesTexts.join("\n");
     }
     async getContentReplyFromGPT(context) {
+        const lastContent = await this.contentTelegramRepository.findOne({
+            order: ['create_at DESC'],
+        });
+        if (lastContent == null) {
+            throw new Error("Không tìm thấy content cuối cùng");
+        }
+        ;
+        let content = lastContent.content;
         const res = await this.gptService.responseChat(new models_1.ChatGptParam({
             messages: [
                 new models_1.MessGpt({
                     role: "system",
-                    content: constant_1.prompt_system_telegram,
+                    content: (0, constant_1.prompt_reply_system_telegram)(content !== null && content !== void 0 ? content : ""),
                 }),
                 new models_1.MessGpt({
                     role: "user",
@@ -109,8 +117,10 @@ exports.TelegramController = TelegramController = tslib_1.__decorate([
     tslib_1.__param(0, (0, core_1.service)(services_1.TelegramBotService)),
     tslib_1.__param(1, (0, core_1.service)(services_1.GptService)),
     tslib_1.__param(2, (0, repository_1.repository)(repositories_1.MessageRepository)),
+    tslib_1.__param(3, (0, repository_1.repository)(repositories_1.ContentTelegramRepository)),
     tslib_1.__metadata("design:paramtypes", [services_1.TelegramBotService,
         services_1.GptService,
-        repositories_1.MessageRepository])
+        repositories_1.MessageRepository,
+        repositories_1.ContentTelegramRepository])
 ], TelegramController);
 //# sourceMappingURL=telegram.controller.js.map
