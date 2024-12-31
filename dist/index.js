@@ -10,6 +10,8 @@ async function main(options = {}) {
     const app = new application_1.GptServiceApplication(options);
     await app.boot();
     await app.start();
+    const telegramBotService = await app.get('services.TelegramBotService');
+    await telegramBotService.initWebHook();
     const url = app.restServer.url;
     console.log(`Server is running at ${url}`);
     console.log(`Try ${url}/ping`);
@@ -20,7 +22,7 @@ if (require.main === module) {
     // Run the application
     const config = {
         rest: {
-            port: +((_a = process.env.PORT) !== null && _a !== void 0 ? _a : 3000),
+            port: +((_a = process.env.PORT) !== null && _a !== void 0 ? _a : 3002),
             host: process.env.HOST,
             // The `gracePeriodForClose` provides a graceful close for http/https
             // servers with keep-alive clients. The default value is `Infinity`

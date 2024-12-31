@@ -28,7 +28,7 @@ let SchedulerManager = class SchedulerManager {
             timezone: "Etc/UTC"
         });
         // Chạy Reply bài viết lên Twitter mỗi 15 phút
-        node_cron_1.default.schedule('00 30 15 * * *', async () => {
+        node_cron_1.default.schedule('*/16 * * * *', async () => {
             try {
                 let RepliesToReplyInTodayTweet = await this.twitterService.getRepliesToReplyInTodayTweet();
                 if (RepliesToReplyInTodayTweet == null)
