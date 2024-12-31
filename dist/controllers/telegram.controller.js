@@ -4,75 +4,92 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TelegramController = void 0;
 const tslib_1 = require("tslib");
 const core_1 = require("@loopback/core");
+const repository_1 = require("@loopback/repository");
 const rest_1 = require("@loopback/rest");
 const constant_1 = require("../constant");
 const models_1 = require("../models");
+const repositories_1 = require("../repositories");
 const services_1 = require("../services");
-// import {inject} from '@loopback/core';
 let TelegramController = class TelegramController {
-    constructor(telegramBotService, gptService) {
+    constructor(telegramBotService, gptService, messageRepository) {
         this.telegramBotService = telegramBotService;
         this.gptService = gptService;
+        this.messageRepository = messageRepository;
     }
     async handleTelegramUpdate(body) {
         var _a;
-        console.log('🚀 New update from Telegram:', body);
-        const bot = this.telegramBotService.bot;
-        // Dữ liệu update từ Telegram
-        const update = body;
-        if (update.message) {
-            let isGroup = update.message.chat.type === "group";
-            if (isGroup) {
-                const chatId = update.message.chat.id;
-                const text = update.message.text || '';
-                const nameOfSender = update.message.from.first_name + " " + update.message.from.last_name;
-                // todo: save `text` to db
-                let isMention = (((_a = update.message.entities) !== null && _a !== void 0 ? _a : []).length > 0) && (update.message.entities[0].type === "mention");
-                if (isMention) {
-                    let content = text.replace("@dylan_tetris_bot", "");
-                    let content_reply = await this.getContentReplyFromGPT(content);
-                    content_reply = nameOfSender + ", " + content_reply;
-                    await bot.sendMessage(chatId, content_reply);
+        try {
+            console.log('🚀 New update from Telegram:', body);
+            const bot = this.telegramBotService.bot;
+            const update = body;
+            if (update.message) {
+                let isGroup = update.message.chat.type.includes("group");
+                if (isGroup) {
+                    const chatId = update.message.chat.id;
+                    const text = update.message.text || '';
+                    const idOfSender = update.message.from.id;
+                    const nameOfSender = update.message.from.first_name + " " + update.message.from.last_name;
+                    let content = text.replace(`@${constant_1.nameChatBotTelegram}`, "").trim();
+                    const context_chat = await this.saveMessageAndGetContext(idOfSender, nameOfSender, content, chatId);
+                    let isMention = (((_a = update.message.entities) !== null && _a !== void 0 ? _a : []).length > 0) && (update.message.entities[0].type === "mention");
+                    if (isMention) {
+                        let content_reply = await this.getContentReplyFromGPT(context_chat);
+                        await this.messageRepository.create({
+                            username: constant_1.nameChatBotTelegram,
+                            text: content_reply,
+                            group_id: chatId,
+                            sender_id: idOfSender,
+                        });
+                        await bot.sendMessage(chatId, content_reply);
+                    }
+                }
+                else {
+                    let mess = "Chức năng này chỉ hoạt động trong group";
+                    await bot.sendMessage(update.message.chat.id, mess);
                 }
             }
         }
-        // try {
-        //   // 1. Kiểm tra nếu update có message:
-        //   if (update.message) {
-        //     const chatId = update.message.chat.id;
-        //     const text = update.message.text || '';
-        //     // 2. Ví dụ: trả lời đơn giản
-        //     if (text === '/start') {
-        //       await bot.sendMessage(chatId, 'Chào bạn, đây là bot LoopBack 4!');
-        //     } else {
-        //       await bot.sendMessage(chatId, `Bạn vừa gửi: ${text}`);
-        //     }
-        //   }
-        //   // chanel post
-        //   if (update.channel_post) {
-        //     const chatId = update.channel_post.chat.id;
-        //     let isMention = update.channel_post.entities[0].type === "mention";
-        //     let text = update.channel_post.text || '';
-        //     if (isMention) {
-        //       text = text.replace("@dylan_tetris_bot", "");
-        //       const content_reply = await this.getContentReplyFromGPT(text);
-        //       await bot.sendMessage(chatId, content_reply);
-        //     }
-        //   }
-        // } catch (error) {
-        //   console.error('Lỗi xử lý Telegram Update:', error);
-        // }
+        catch (e) {
+            console.log(e);
+        }
     }
-    async getContentReplyFromGPT(content) {
+    async saveMessageAndGetContext(idOfSender, nameOfSender, content, chatId) {
+        await this.messageRepository.create({
+            sender_id: idOfSender,
+            username: nameOfSender,
+            text: content,
+            group_id: chatId,
+        });
+        const context_chat = await this.getContextChat(chatId);
+        return context_chat;
+    }
+    async getContextChat(chatId) {
+        let timeBefore10Minutes = new Date();
+        timeBefore10Minutes.setMinutes(timeBefore10Minutes.getMinutes() - constant_1.time_of_session_telegram_bot);
+        console.log(timeBefore10Minutes);
+        let messages = await this.messageRepository.find({
+            where: {
+                group_id: chatId,
+                create_at: {
+                    between: [timeBefore10Minutes, new Date()]
+                }
+            }
+        });
+        if (messages.length > 10)
+            messages = messages.slice(messages.length - 10, messages.length);
+        let messagesTexts = messages.map((message) => message.username + message.text);
+        return messagesTexts.join("\n");
+    }
+    async getContentReplyFromGPT(context) {
         const res = await this.gptService.responseChat(new models_1.ChatGptParam({
             messages: [
                 new models_1.MessGpt({
                     role: "system",
-                    content: (0, constant_1.prompt_reply_system)("bóng tối bao phủ vũ trụ"),
+                    content: constant_1.prompt_system_telegram,
                 }),
                 new models_1.MessGpt({
                     role: "user",
-                    content: `input: ${content}`,
+                    content: `${context}`,
                 })
             ]
         }));
@@ -91,7 +108,9 @@ tslib_1.__decorate([
 exports.TelegramController = TelegramController = tslib_1.__decorate([
     tslib_1.__param(0, (0, core_1.service)(services_1.TelegramBotService)),
     tslib_1.__param(1, (0, core_1.service)(services_1.GptService)),
+    tslib_1.__param(2, (0, repository_1.repository)(repositories_1.MessageRepository)),
     tslib_1.__metadata("design:paramtypes", [services_1.TelegramBotService,
-        services_1.GptService])
+        services_1.GptService,
+        repositories_1.MessageRepository])
 ], TelegramController);
 //# sourceMappingURL=telegram.controller.js.map

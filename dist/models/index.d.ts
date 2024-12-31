@@ -1,2 +1,3 @@
 export * from './chat-gpt-param.model';
 export * from './mess-gpt.model';
+export * from './message.model';
