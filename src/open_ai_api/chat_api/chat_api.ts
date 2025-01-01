@@ -4,7 +4,7 @@ import {ChatGptParam} from '../../models';
 
 export const chatCompleteApiV2 = async (streamGPT: Readable, data: ChatGptParam) => {
   const url = 'https://api.openai.com/v1/chat/completions';
-  const apiKey: string = process.env.key_openAI || "";
+  const apiKey: string = process.env.KEY_OPENAI || "";
 
   const headers = {
     'Authorization': `Bearer ${apiKey}`,
@@ -45,7 +45,7 @@ export const chatCompleteApiV2 = async (streamGPT: Readable, data: ChatGptParam)
 
 export const chatResponseApi = async (data: ChatGptParam): Promise<JSON> => {
   const url = 'https://api.openai.com/v1/chat/completions';
-  const apiKey: string = process.env.key_openAI || "";
+  const apiKey: string = process.env.KEY_OPENAI || "";
 
   const headers = {
     'Authorization': `Bearer ${apiKey}`,
