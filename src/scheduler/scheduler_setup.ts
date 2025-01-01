@@ -4,7 +4,7 @@ import {repository} from '@loopback/repository';
 import cron from 'node-cron';
 import {prompt_reply_system, prompt_system, prompt_to_create_post, time_utc_post_telegram_every_day, time_utc_post_tweeter_every_day} from '../constant';
 import {ChatGptParam, MessGpt} from '../models';
-import {ContentTelegramRepository, MessageRepository} from '../repositories';
+import {ContentTelegramRepository, GroupToPostContentRepository, MessageRepository} from '../repositories';
 import {GptService, TelegramBotService, TwitterService} from '../services';
 
 @injectable()
@@ -20,6 +20,8 @@ export class SchedulerManager implements LifeCycleObserver {
     public contentTelegramRepository: ContentTelegramRepository,
     @repository(MessageRepository)
     public messageRepository: MessageRepository,
+    @repository(GroupToPostContentRepository)
+    public groupToPostContentRepository: GroupToPostContentRepository,
   ) {
     // Chạy Post bài viết lên Twitter mỗi ngày
     cron.schedule(time_utc_post_tweeter_every_day, async () => {
@@ -41,21 +43,21 @@ export class SchedulerManager implements LifeCycleObserver {
     cron.schedule(time_utc_post_telegram_every_day, async () => {
       console.log("Post bài viết lên Telegram mỗi ngày");
       try {
-        let content = await this.getContentFromGPT();
-        content = await this.getContentFromGPT();
-        let lastChatContent = (await this.messageRepository.findOne(
-          {
-            order: ['create_at DESC'],
+        let groupsToPostContent = (await this.groupToPostContentRepository.find());
+        for (let i = 0; i < groupsToPostContent.length; i++) {
+          try {
+            let content = await this.getContentFromGPT();
+            content = await this.getContentFromGPT();
+            let id_group = groupsToPostContent[i].group_id ?? "";
+            await this.telegramBotService.bot.sendMessage(id_group, content);
+            await this.contentTelegramRepository.create({
+              content: content,
+              id_group: id_group,
+            })
+          } catch (e) {
+            console.log(e)
           }
-        ));
-        if (lastChatContent == null) return;
-        let lastChatId = lastChatContent.group_id;
-        if (lastChatId == null) return;
-        await this.telegramBotService.bot.sendMessage(lastChatId, content);
-        await this.contentTelegramRepository.create({
-          content: content,
-          id_group: lastChatId
-        })
+        }
       } catch (e) {
         console.log(e);
       }
@@ -71,18 +73,22 @@ export class SchedulerManager implements LifeCycleObserver {
         if (RepliesToReplyInTodayTweet == null) return;
 
         for (let i = 0; i < RepliesToReplyInTodayTweet.repliesToReply.length; i++) {
-          let content = await this.getContentReplyFromGPT(
-            RepliesToReplyInTodayTweet.tweetContent,
-            RepliesToReplyInTodayTweet.repliesToReply[i].text,
-          );
-          while (content.length > 280) {
-            content = await this.getContentReplyFromGPT(
+          try {
+            let content = await this.getContentReplyFromGPT(
               RepliesToReplyInTodayTweet.tweetContent,
               RepliesToReplyInTodayTweet.repliesToReply[i].text,
             );
-          }
+            while (content.length > 280) {
+              content = await this.getContentReplyFromGPT(
+                RepliesToReplyInTodayTweet.tweetContent,
+                RepliesToReplyInTodayTweet.repliesToReply[i].text,
+              );
+            }
 
-          await this.twitterService.replyToTweet(RepliesToReplyInTodayTweet.repliesToReply[i].id, content);
+            await this.twitterService.replyToTweet(RepliesToReplyInTodayTweet.repliesToReply[i].id, content);
+          } catch (e) {
+            console.log(e);
+          }
         }
       } catch (e) {
         console.log(e);

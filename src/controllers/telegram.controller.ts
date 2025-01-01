@@ -2,10 +2,10 @@
 
 import {service} from '@loopback/core';
 import {repository} from '@loopback/repository';
-import {post, requestBody} from '@loopback/rest';
-import {max_number_of_message_for_context_bot_telegram, nameChatBotTelegram, prompt_reply_system_telegram, time_of_session_telegram_bot} from '../constant';
+import {get, post, requestBody} from '@loopback/rest';
+import {headerGroupPostContent, max_number_of_message_for_context_bot_telegram, minutes_of_session_telegram_bot, nameChatBotTelegram, prompt_reply_user_telegram, prompt_user_telegram_no_content} from '../constant';
 import {ChatGptParam, MessGpt} from '../models';
-import {ContentTelegramRepository, MessageRepository} from '../repositories';
+import {ContentTelegramRepository, GroupToPostContentRepository, MessageRepository} from '../repositories';
 import {GptService, TelegramBotService} from '../services';
 
 export class TelegramController {
@@ -18,7 +18,30 @@ export class TelegramController {
     public messageRepository: MessageRepository,
     @repository(ContentTelegramRepository)
     public contentTelegramRepository: ContentTelegramRepository,
+    @repository(GroupToPostContentRepository)
+    public groupToPostContentRepository: GroupToPostContentRepository
   ) { }
+
+  @get('api/delete-all-data')
+  async deleteAllData(): Promise<void> {
+    await this.messageRepository.deleteAll();
+    await this.contentTelegramRepository.deleteAll();
+    await this.groupToPostContentRepository.deleteAll();
+  }
+
+
+  @get('api/delete-all-without-session')
+  async deleteAllSession(): Promise<void> {
+    let timeBefore10Minutes = new Date();
+    timeBefore10Minutes.setMinutes(timeBefore10Minutes.getMinutes() - minutes_of_session_telegram_bot);
+    await this.messageRepository.deleteAll(
+      {
+        create_at: {
+          lt: timeBefore10Minutes
+        }
+      }
+    );
+  }
 
   @post('api/telegram-webhook')
   async handleTelegramUpdate(
@@ -34,14 +57,17 @@ export class TelegramController {
         let isGroup = update.message.chat.type.includes("group");
         if (isGroup) {
           const chatId = update.message.chat.id;
-          const text = update.message.text || '';
           const idOfSender = update.message.from.id;
-          const nameOfSender = update.message.from.first_name + " " + update.message.from.last_name;
-          let content = text;
-          const context_chat = await this.saveMessageAndGetContext(idOfSender, nameOfSender, content, chatId);
+
+          const context_chat = await this.saveMessageAndGetContext(update.message);
+
           let isMention = ((update.message.entities ?? []).length > 0) && (update.message.entities[0].type === "mention");
+
           if (isMention) {
-            let content_reply = await this.getContentReplyFromGPT(context_chat);
+            let content_reply = await this.getContentReplyFromGPT(
+              context_chat.rolesOfContext,
+              context_chat.context, chatId);
+
             await this.messageRepository.create({
               username: nameChatBotTelegram,
               text: content_reply,
@@ -60,7 +86,19 @@ export class TelegramController {
     }
 
   }
-  private async saveMessageAndGetContext(idOfSender: any, nameOfSender: string, content: any, chatId: any) {
+  private async saveMessageAndGetContext(message: any): Promise<{
+    rolesOfContext: string,
+    context: string
+  }> {
+    const chatId = message.chat.id;
+    const idOfSender = message.from.id;
+    let nameOfSender = (message.from.first_name ?? "") + " " + (message.from.last_name ?? "");
+    nameOfSender = nameOfSender.trim();
+    const content = message.text || '';
+    let group_title = message.chat.title;
+
+    this.add_group_chat_to_post_content(group_title, chatId);
+
     await this.messageRepository.create({
       sender_id: idOfSender,
       username: nameOfSender,
@@ -68,12 +106,28 @@ export class TelegramController {
       group_id: chatId,
     });
     const context_chat = await this.getContextChat(chatId);
+
     return context_chat;
   }
 
-  async getContextChat(chatId: any) {
+  private async add_group_chat_to_post_content(group_title: any, chatId: any) {
+    if (group_title.includes(headerGroupPostContent)) {
+      if (await this.groupToPostContentRepository.findOne({
+        where: {
+          group_id: chatId,
+        }
+      }) == null) await this.groupToPostContentRepository.create({
+        group_id: chatId,
+      });
+    }
+  }
+
+  async getContextChat(chatId: any): Promise<{
+    rolesOfContext: string,
+    context: string
+  }> {
     let timeBefore10Minutes = new Date();
-    timeBefore10Minutes.setMinutes(timeBefore10Minutes.getMinutes() - time_of_session_telegram_bot);
+    timeBefore10Minutes.setMinutes(timeBefore10Minutes.getMinutes() - minutes_of_session_telegram_bot);
     let messages = await this.messageRepository.find({
       where: {
         group_id: chatId,
@@ -84,32 +138,47 @@ export class TelegramController {
     })
     if (messages.length > max_number_of_message_for_context_bot_telegram) messages = messages.slice(messages.length - max_number_of_message_for_context_bot_telegram, messages.length);
     let messagesTexts = messages.map((message) => message.username + ": " + message.text);
-    return messagesTexts.join("\n");
+    let roles = [];
+    for (let i = 0; i < messages.length; i++) {
+      if (roles.indexOf(messages[i].username) === -1) {
+        roles.push(messages[i].username);
+      }
+    }
+    return {
+      rolesOfContext: roles.join(", "),
+      context: messagesTexts.join("\n")
+    };
   }
 
   async getContentReplyFromGPT(
+    rolesOfContext: string,
     context: string,
+    chatId: string,
   ): Promise<string> {
     const lastContent = await this.contentTelegramRepository.findOne({
       order: ['create_at DESC'],
+      where: {
+        id_group: chatId,
+      }
     })
+    let prompt = "";
     if (lastContent == null) {
-      throw new Error("Không tìm thấy content cuối cùng");
-    };
-    let content = lastContent.content;
+      prompt = prompt_user_telegram_no_content(rolesOfContext, context);
+    } else {
+      prompt = prompt_reply_user_telegram(rolesOfContext, lastContent.content ?? "", context);
+    }
     const res = await this.gptService.responseChat(new ChatGptParam({
       messages: [
         new MessGpt({
-          role: "system",
-          content: prompt_reply_system_telegram(content ?? ""),
-        }),
-        new MessGpt({
           role: "user",
-          content: `${context}`,
-        })
+          content: prompt,
+        }),
       ]
     }));
     const content_reply = (res as any)["choices"][0]["message"]["content"];
+    if (content_reply.startsWith(`${nameChatBotTelegram}:`) || content_reply.startsWith(`@${nameChatBotTelegram}: `)) {
+      return content_reply.substring(content_reply.indexOf(":") + 1).trim();
+    }
     return content_reply;
   }
 }

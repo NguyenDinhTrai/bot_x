@@ -10,12 +10,13 @@ const models_1 = require("../models");
 const repositories_1 = require("../repositories");
 const services_1 = require("../services");
 let SchedulerManager = class SchedulerManager {
-    constructor(twitterService, gptService, telegramBotService, contentTelegramRepository, messageRepository) {
+    constructor(twitterService, gptService, telegramBotService, contentTelegramRepository, messageRepository, groupToPostContentRepository) {
         this.twitterService = twitterService;
         this.gptService = gptService;
         this.telegramBotService = telegramBotService;
         this.contentTelegramRepository = contentTelegramRepository;
         this.messageRepository = messageRepository;
+        this.groupToPostContentRepository = groupToPostContentRepository;
         // Chạy Post bài viết lên Twitter mỗi ngày
         node_cron_1.default.schedule(constant_1.time_utc_post_tweeter_every_day, async () => {
             console.log("Post bài viết lên Twitter mỗi ngày");
@@ -33,23 +34,20 @@ let SchedulerManager = class SchedulerManager {
             timezone: "Etc/UTC"
         });
         node_cron_1.default.schedule(constant_1.time_utc_post_telegram_every_day, async () => {
+            var _a;
             console.log("Post bài viết lên Telegram mỗi ngày");
             try {
-                let content = await this.getContentFromGPT();
-                content = await this.getContentFromGPT();
-                let lastChatContent = (await this.messageRepository.findOne({
-                    order: ['create_at DESC'],
-                }));
-                if (lastChatContent == null)
-                    return;
-                let lastChatId = lastChatContent.group_id;
-                if (lastChatId == null)
-                    return;
-                await this.telegramBotService.bot.sendMessage(lastChatId, content);
-                await this.contentTelegramRepository.create({
-                    content: content,
-                    id_group: lastChatId
-                });
+                let groupsToPostContent = (await this.groupToPostContentRepository.find());
+                for (let i = 0; i < groupsToPostContent.length; i++) {
+                    let content = await this.getContentFromGPT();
+                    content = await this.getContentFromGPT();
+                    let id_group = (_a = groupsToPostContent[i].group_id) !== null && _a !== void 0 ? _a : "";
+                    await this.telegramBotService.bot.sendMessage(id_group, content);
+                    await this.contentTelegramRepository.create({
+                        content: content,
+                        id_group: id_group,
+                    });
+                }
             }
             catch (e) {
                 console.log(e);
@@ -121,10 +119,12 @@ exports.SchedulerManager = SchedulerManager = tslib_1.__decorate([
     tslib_1.__param(2, (0, core_1.service)(services_1.TelegramBotService)),
     tslib_1.__param(3, (0, repository_1.repository)(repositories_1.ContentTelegramRepository)),
     tslib_1.__param(4, (0, repository_1.repository)(repositories_1.MessageRepository)),
+    tslib_1.__param(5, (0, repository_1.repository)(repositories_1.GroupToPostContentRepository)),
     tslib_1.__metadata("design:paramtypes", [services_1.TwitterService,
         services_1.GptService,
         services_1.TelegramBotService,
         repositories_1.ContentTelegramRepository,
-        repositories_1.MessageRepository])
+        repositories_1.MessageRepository,
+        repositories_1.GroupToPostContentRepository])
 ], SchedulerManager);
 //# sourceMappingURL=scheduler_setup.js.map

@@ -3,32 +3,43 @@
 export let time_utc_post_tweeter_every_day = "00 17 15 * * *";
 let topics = "Parallel universes, Lost civilizations, Unexplored oceans, Cryptic symbols, The human mind, Alien artefacts, Ancient prophecies, Cosmic phenomena, Time travel, Forgotten technologies";
 
-export let time_utc_post_telegram_every_day = "50 33 11 * * *";
+export let time_utc_post_telegram_every_day = "50 26 11 * * *";
 export let nameChatBotTelegram = "dylan_ttt_bot";
 export let max_number_of_message_for_context_bot_telegram = 10
-export let time_of_session_telegram_bot = 10
+export let minutes_of_session_telegram_bot = 10
+
+export let headerGroupPostContent = "dsds";
 ////// end custome //////
 
-export function prompt_reply_system_telegram(
+
+export function prompt_user_telegram_no_content(role: string, context: string) {
+  return `You are an active participant in a group conversation involving multiple characters, your name is ${nameChatBotTelegram}.
+Participants:
+${role}: Friendly and conversational
+
+Current Context:
+${context}
+
+Your Role (${nameChatBotTelegram}): Respond in a concise and human-like manner. Respond thoughtfully to the above context, acknowledging the previous comments, adding an insight.
+`}
+
+export function prompt_reply_user_telegram(
+  role: string,
   content: string,
+  context: string,
 ): string {
   return `
 You are a content moderator and conversationalist for a social media account on Telegram, your name is ${nameChatBotTelegram}. Your job is to reply to users' comments in a polite, engaging, and contextually appropriate manner.
 
 Context:
 content: ${content}
-Rules for Replying:
-If userReply discusses the topic, reply insightfully and further the discussion (under 280 characters).
-If userReply is positive, express gratitude concisely (under 280 characters).
-If userReply is negative, apologize politely and address their concerns (under 280 characters).
-Variables:
-content: The main content of the post.
-userReply: The user's comment.
-Use these rules to craft replies that align with the context of the content and maintain a friendly, engaging, and professional tone.
-Reply only with content without name: eg:
-hello you
-not:
-name: hello you
+Participants:
+${role}: Friendly and conversational
+
+Current Context:
+${context}
+
+Your Role (${nameChatBotTelegram}): Respond in a concise and human-like manner. Respond thoughtfully to the above context, acknowledging the previous comments, adding an insight
 `
 }
 

@@ -5,7 +5,7 @@ const tslib_1 = require("tslib");
 const axios_1 = tslib_1.__importDefault(require("axios"));
 const chatCompleteApiV2 = async (streamGPT, data) => {
     const url = 'https://api.openai.com/v1/chat/completions';
-    const apiKey = process.env.key_openAI || "";
+    const apiKey = process.env.KEY_OPENAI || "";
     const headers = {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
@@ -43,7 +43,7 @@ const chatCompleteApiV2 = async (streamGPT, data) => {
 exports.chatCompleteApiV2 = chatCompleteApiV2;
 const chatResponseApi = async (data) => {
     const url = 'https://api.openai.com/v1/chat/completions';
-    const apiKey = process.env.key_openAI || "";
+    const apiKey = process.env.KEY_OPENAI || "";
     const headers = {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
