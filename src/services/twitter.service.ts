@@ -36,6 +36,7 @@ export class TwitterService {
       };
 
     } catch (e) {
+      console.log(e);
       return {
         response: e,
       };
@@ -229,7 +230,7 @@ export class TwitterService {
       const unReplytweets = [];
       const repliesMap = new Map();
 
-
+      if (tweets == undefined || tweets.length == 0) return [];
       tweets.forEach(tweet => {
         if (tweet.in_reply_to_user_id) {
           repliesMap.set(tweet.in_reply_to_user_id, (repliesMap.get(tweet.in_reply_to_user_id) || []).concat(tweet.author_id));
