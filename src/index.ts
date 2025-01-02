@@ -2,10 +2,8 @@ import {ApplicationConfig, GptServiceApplication} from './application';
 
 export * from './application';
 
+
 export async function main(options: ApplicationConfig = {}) {
-  require('dotenv').config();
-
-
   const app = new GptServiceApplication(options);
   await app.boot();
   await app.start();
@@ -21,6 +19,7 @@ export async function main(options: ApplicationConfig = {}) {
 }
 
 if (require.main === module) {
+  require('dotenv').config();
   // Run the application
   const config = {
     rest: {

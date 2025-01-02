@@ -58,24 +58,30 @@ export class TelegramController {
         if (isGroup) {
           const chatId = update.message.chat.id;
           const idOfSender = update.message.from.id;
+          const content: string = update.message.text || '';
 
           const context_chat = await this.saveMessageAndGetContext(update.message);
 
-          let isMention = ((update.message.entities ?? []).length > 0) && (update.message.entities[0].type === "mention");
+          const nameBot = nameChatBotTelegram.split("_bot")[0];
+          let isMention = content.toLowerCase().includes(nameBot);
+          let isQuoute = false;
 
           if (isMention) {
-            let content_reply = await this.getContentReplyFromGPT(
-              context_chat.rolesOfContext,
-              context_chat.context, chatId);
+            await this.reply_in_group(context_chat, chatId, idOfSender, bot);
+          } else {
+            try {
+              if (body.message?.reply_to_message != null) {
+                isQuoute = (body.message?.reply_to_message?.from?.username == nameChatBotTelegram);
+              }
+            } catch (e) {
+              console.log(e);
+            }
+            if (isQuoute) {
+              await this.reply_in_group(context_chat, chatId, idOfSender, bot);
+            }
 
-            await this.messageRepository.create({
-              username: nameChatBotTelegram,
-              text: content_reply,
-              group_id: chatId,
-              sender_id: idOfSender,
-            });
-            await bot.sendMessage(chatId, content_reply);
           }
+
         } else {
           let mess = "Chức năng này chỉ hoạt động trong group";
           await bot.sendMessage(update.message.chat.id, mess);
@@ -85,7 +91,22 @@ export class TelegramController {
       console.log(e);
     }
 
+    this.deleteAllSession();
   }
+  private async reply_in_group(context_chat: {rolesOfContext: string; context: string;}, chatId: any, idOfSender: any, bot: any) {
+    let content_reply = await this.getContentReplyFromGPT(
+      context_chat.rolesOfContext,
+      context_chat.context, chatId);
+
+    await this.messageRepository.create({
+      username: nameChatBotTelegram,
+      text: content_reply,
+      group_id: chatId,
+      sender_id: idOfSender,
+    });
+    await bot.sendMessage(chatId, content_reply);
+  }
+
   private async saveMessageAndGetContext(message: any): Promise<{
     rolesOfContext: string,
     context: string
@@ -165,7 +186,7 @@ export class TelegramController {
     if (lastContent == null) {
       prompt = prompt_user_telegram_no_content(rolesOfContext, context);
     } else {
-      prompt = prompt_reply_user_telegram(rolesOfContext, lastContent.content ?? "", context);
+      prompt = prompt_reply_user_telegram(rolesOfContext, lastContent.content ?? "", context, nameChatBotTelegram);
     }
     const res = await this.gptService.responseChat(new ChatGptParam({
       messages: [
