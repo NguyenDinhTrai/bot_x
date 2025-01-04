@@ -1,6 +1,8 @@
 import { /* inject, */ BindingScope, injectable} from '@loopback/core';
 import axios from 'axios';
 import crypto from 'crypto';
+import FormData from 'form-data';
+import * as fs from 'fs';
 import OAuth from 'oauth-1.0a';
 import Twitter from 'twitter-lite';
 
@@ -28,6 +30,7 @@ export class TwitterService {
           },
           data: {
             text: content,
+
           },
         }
       )
@@ -41,6 +44,73 @@ export class TwitterService {
         response: e,
       };
     }
+  }
+  public async postTweetWithMedia(content: string, media: {
+    media_ids: string[],
+  }) {
+    try {
+      let request_data = {
+        url: 'https://api.twitter.com/2/tweets',
+        method: 'POST'
+      }
+      var headersString = this.getHearderOauth01(request_data);
+      const response = await axios.request(
+        {
+          method: request_data.method,
+          url: request_data.url,
+          headers: {
+            "Authorization": "OAuth " + headersString,
+            "Content-Type": "application/json",
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+          },
+          data: {
+            text: content,
+            media,
+          },
+        }
+      )
+      return {
+        response: response.data,
+      };
+
+    } catch (e) {
+      console.log(e);
+      return {
+        response: e,
+      };
+    }
+  }
+
+  public async uploadMedia(filePath: string): Promise<string | null> {
+
+    try {
+      let request_data = {
+        url: 'https://upload.twitter.com/1.1/media/upload.json?media_category=tweet_image',
+        method: 'POST'
+      }
+      var headersString = this.getHearderOauth01(request_data);
+      const form = new FormData();
+      form.append('media', fs.createReadStream(filePath), 'image.jpg');
+
+      const response = await axios.post(request_data.url, form, {
+        headers: {
+          "Authorization": "OAuth " + headersString,
+          "Content-Type": "application/json",
+          "Accept": "*/*",
+          "Accept-Encoding": "gzip, deflate, br",
+          "Connection": "keep-alive",
+          ...form.getHeaders(),
+        },
+      }
+      )
+      return response.data.media_id_string;
+    } catch (e) {
+      console.log(e);
+      return null;
+    }
+
   }
 
   public async replyToTweet(
@@ -215,7 +285,7 @@ export class TwitterService {
     in_reply_to_user_id: string,
   }[]> {
     try {
-      let tweetClient = this.clientUsePackage()
+      let tweetClient = this.clientUsePackageV2()
 
       let res = await tweetClient.get(
         `tweets/search/recent`,
@@ -249,7 +319,7 @@ export class TwitterService {
     }
   }
 
-  private clientUsePackage() {
+  private clientUsePackageV2() {
     return new Twitter({
       consumer_key: process.env.TWITTER_CONSUMER_KEY ?? "",
       consumer_secret: process.env.TWITTER_CONSUMER_SECRET ?? "",
@@ -257,6 +327,16 @@ export class TwitterService {
       access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET ?? "",
       version: "2",
       extension: false,
+    });
+  }
+  private clientUsePackageV1() {
+    return new Twitter({
+      consumer_key: process.env.TWITTER_CONSUMER_KEY ?? "",
+      consumer_secret: process.env.TWITTER_CONSUMER_SECRET ?? "",
+      access_token_key: process.env.TWITTER_ACCESS_TOKEN ?? "",
+      access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET ?? "",
+      version: "1.1",
+      extension: true
     });
   }
 

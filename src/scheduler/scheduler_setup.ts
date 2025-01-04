@@ -2,14 +2,16 @@
 import {injectable, LifeCycleObserver, service} from '@loopback/core';
 import {repository} from '@loopback/repository';
 import cron from 'node-cron';
-import {nameChatBotTelegram, prompt_reply_user_telegram, prompt_system, prompt_to_create_post, time_utc_post_telegram_every_day, time_utc_post_tweeter_every_day} from '../constant';
+import {nameChatBotTelegram, prompt_reply_user, prompt_system_twitter_post, prompt_to_create_post, prompt_to_create_post_with_specific_topic, time_utc_post_telegram_every_day, time_utc_post_tweeter_every_day} from '../constant';
 import {ChatGptParam, MessGpt} from '../models';
 import {ContentTelegramRepository, GroupToPostContentRepository, MessageRepository} from '../repositories';
-import {GptService, TelegramBotService, TwitterService} from '../services';
+import {AssetService, GptService, TelegramBotService, TwitterService} from '../services';
 
 @injectable()
 export class SchedulerManager implements LifeCycleObserver {
   constructor(
+    @service(AssetService)
+    public assetService: AssetService,
     @service(TwitterService)
     public twitterService: TwitterService,
     @service(GptService)
@@ -27,6 +29,28 @@ export class SchedulerManager implements LifeCycleObserver {
     cron.schedule(time_utc_post_tweeter_every_day, async () => {
       console.log("Post bài viết lên Twitter mỗi ngày");
       try {
+        let image = await this.assetService.getImageToday();
+        if (image != null) {
+          // Post bài viết lên Twitter với ảnh
+          let id = await this.twitterService.uploadMedia(
+            image.filepath,
+          );
+          if (id != null) {
+            let content = await this.getContentFromGPTWithTopic(image.topic);
+            while (content.length > 280) {
+              content = await this.getContentFromGPTWithTopic(image.topic);
+            }
+            await this.twitterService.postTweetWithMedia(
+              content,
+              {
+                media_ids: [(id ?? "")],
+              }
+            )
+            await this.assetService.changeDoneImage(image.filepath);
+            return;
+          }
+        }
+        // Post bài viết lên Twitter bình thường.
         let content = await this.getContentFromGPT();
         while (content.length > 280) {
           content = await this.getContentFromGPT();
@@ -113,7 +137,7 @@ export class SchedulerManager implements LifeCycleObserver {
       messages: [
         new MessGpt({
           role: "user",
-          content: prompt_reply_user_telegram(
+          content: prompt_reply_user(
             "user",
             content,
             `user: ${reply}`,
@@ -134,7 +158,7 @@ export class SchedulerManager implements LifeCycleObserver {
       messages: [
         new MessGpt({
           role: "system",
-          content: prompt_system,
+          content: prompt_system_twitter_post,
         }),
         new MessGpt({
           role: "user",
@@ -145,6 +169,24 @@ export class SchedulerManager implements LifeCycleObserver {
     const content = (res as any)["choices"][0]["message"]["content"];
     return content;
   }
+
+  private async getContentFromGPTWithTopic(topic: string): Promise<string> {
+    const res = await this.gptService.responseChat(new ChatGptParam({
+      messages: [
+        new MessGpt({
+          role: "system",
+          content: prompt_system_twitter_post,
+        }),
+        new MessGpt({
+          role: "user",
+          content: prompt_to_create_post_with_specific_topic(topic),
+        })
+      ]
+    }));
+    const content = (res as any)["choices"][0]["message"]["content"];
+    return content;
+  }
+
 
   start(): void { }
   stop(): void { }
